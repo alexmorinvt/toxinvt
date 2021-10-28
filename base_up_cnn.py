@@ -121,7 +121,7 @@ class_weight = {0: 1.,
             1: 1.}
 
 model.compile(optimizer=opt,
-            loss='categorical_crossentropy',
+            loss='binary_crossentropy',
             metrics=['accuracy'])
 
 model.fit(train_descriptors, train_activity, callbacks=[LearningRateReducerCb()], epochs=5000, class_weight = class_weight)

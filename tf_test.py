@@ -48,7 +48,7 @@ model.compile(optimizer=opt,
 class_weight = {0: 1.,
                 1: 0.66}
 
-model.fit(x_train, y_train, callbacks=[LearningRateReducerCb()], epochs=5000, class_weight = class_weight, verbose = 0)
+model.fit(x_train, y_train, callbacks=[LearningRateReducerCb()], epochs=5000, class_weight = class_weight)
 test_loss, test_acc = model.evaluate(x_test, y_test)
 
 model.evaluate(x_test, y_test, verbose=2)

@@ -1,6 +1,7 @@
 import tensorflow as tf
 import pandas as pd
 import numpy as np
+import scipy.stats as stats
 
 #60.1% active: ACEA_AR_antagonist_80hr (1770 sample size)
 #51.6%: ATG_PXRE_CIS_up (3522)
@@ -20,76 +21,73 @@ class LearningRateReducerCb(tf.keras.callbacks.Callback):
 
   def on_epoch_end(self, epoch, logs={}):
     old_lr = self.model.optimizer.lr.read_value()
-    new_lr = old_lr * 0.999
+    new_lr = old_lr * 0.995
     print("\nEpoch: {}. Reducing Learning Rate from {} to {}".format(epoch, old_lr, new_lr))
     self.model.optimizer.lr.assign(new_lr)
 
 def leaky_relu(z):
     return np.maximum(0.01 * z, z)
 
-for assay in assays:
+#Data is in the form [SMILES, ACTIVITY, [descriptors]]. randomized by sample
+assay_data = pd.read_csv("./Data/ATG_PXRE_CIS_up.csv")
+assay_data = assay_data.sample(frac=1)
+properties = list(assay_data.columns.values)
 
-    #Data is in the form [SMILES, ACTIVITY, [descriptors]]. randomized by sample
-    assay_data = pd.read_pickle("./TestData/" + assay + "_activity.pkl")
-    # assay_data.sample(frac=1)
-    assay_data = assay_data.values
+activity = assay_data["ACTIVE"]
+properties = list(assay_data.columns.values)
+properties.remove('ACTIVE')
+properties.remove('COUNT')
+properties.remove('SMILES')
+properties.remove('PREFERRED_NAME')
 
-    #axis = 1 signifies a vertical split (column wise). Currently set at 90%
-    train, test = np.split(assay_data, [int(0.9 * len(assay_data))], axis = 0)
+descriptors = assay_data[properties].values
+descriptors = np.add(descriptors, 0.000000000213)
+descriptors = stats.zscore(descriptors, axis=1)
 
-    train_smiles, train_activity, train_descriptors = np.split(train, [1, 2], axis = 1)
-    test_smiles, test_activity, test_descriptors = np.split(test, [1, 2], axis = 1)
 
-    #Processing np array - changing to float, normalizing, and removing nan
-    train_activity = np.asarray(train_activity).astype('float64')
-    train_descriptors = np.asarray(train_descriptors).astype('float64')
-    test_activity = np.asarray(test_activity).astype('float64')
-    test_descriptors = np.asarray(test_descriptors).astype('float64')
+#axis = 1 signifies a vertical split (column wise). Currently set at 90%
+train_x, test_x = np.split(descriptors, [int(0.9 * len(descriptors))], axis = 0)
+train_y, test_y = np.split(activity, [int(0.9 * len(activity))], axis = 0)
 
-    train_activity = np.nan_to_num(train_activity).astype(int)
-    train_descriptors = np.nan_to_num(train_descriptors)
-    test_activity = np.nan_to_num(test_activity).astype(int)
-    test_descriptors = np.nan_to_num(test_descriptors)
+#Processing np array - changing to float, normalizing, and removing nan
+train_x = np.asarray(train_x).astype('float32')
+test_x = np.asarray(test_x).astype('float32')
+train_y = np.asarray(train_y).astype('float32')
+test_y = np.asarray(test_y).astype('float32')
 
-    train_descriptors = np.add(train_descriptors, 0.0000000001)
-    test_descriptors = np.add(test_descriptors, 0.0000000001)
+print(train_x.shape)
+print(train_y.shape)
 
-    train_descriptors = train_descriptors / (train_descriptors.max(axis=0) + 0.00000001)
-    test_descriptors = test_descriptors / (test_descriptors.max(axis=0) + 0.00000001)
+model = tf.keras.models.Sequential([
+    tf.keras.layers.Flatten(input_shape=(208,)),
+    tf.keras.layers.Dense(208, activation='relu'),
+    tf.keras.layers.Dense(208, activation='relu'),
+    tf.keras.layers.Dense(208, activation='relu'),
+    tf.keras.layers.Dense(1, activation = 'sigmoid')
+])
 
-    model = tf.keras.models.Sequential([
-        tf.keras.layers.Dense(208, activation='leaky_relu'),
-        tf.keras.layers.Dense(208, activation='leaky_relu'),
-        tf.keras.layers.Dense(208, activation='leaky_relu'),
-        tf.keras.layers.Dense(208, activation='leaky_relu'),
-        tf.keras.layers.Dense(208, activation='leaky_relu'),
-        tf.keras.layers.Dense(208, activation='leaky_relu'),
-        tf.keras.layers.Dense(208, activation='leaky_relu'),
-        tf.keras.layers.Dense(1, activation = 'sigmoid')
-    ])
+#standard values are lr = 0.001, b1 = 0.9, b2 = 0.999., ep = 1e-07, amsgrad = False
+opt = tf.keras.optimizers.Adam(
+    learning_rate=0.1, beta_1=0.9, beta_2=0.999, epsilon=0.0001, amsgrad=False,
+    name='e',
+)
 
-    #standard values are lr = 0.001, b1 = 0.9, b2 = 0.999., ep = 1e-07, amsgrad = False
-    opt = tf.keras.optimizers.Adam(
-        learning_rate=0.09, beta_1=0.9, beta_2=0.999, epsilon=0.1, amsgrad=False,
-        name='Adam',
-    )
+# opt = tf.keras.optimizers.SGD(
+#     learning_rate=0.01, momentum=0.0, nesterov=False, name="SGD"
+# )
 
-    opt = tf.keras.optimizers.SGD(
-        learning_rate=0.01, momentum=0.0, nesterov=False, name="SGD"
-    )
+class_weight = {0: 1000.,
+            1: 1.}
 
-    class_weight = {0: 1.,
-                1: 0.601}
+model.compile(optimizer="Adam",
+            loss='binary_crossentropy',
+            metrics=['accuracy'])
 
-    model.compile(optimizer=opt,
-                loss='categorical_crossentropy',
-                metrics=['accuracy'])
+model.fit(train_x, train_y, callbacks=[LearningRateReducerCb()], epochs=5, class_weight = class_weight)
 
-    model.fit(train_descriptors, train_activity, callbacks=[LearningRateReducerCb()], epochs=5000, class_weight = class_weight)
+model.evaluate(test_x, test_y, verbose=2)
+predictions = model.predict(test_x)
+predictions = (predictions[:,0] > 0.5).astype(np.int).ravel()
+test_activity = test_y.ravel()
 
-    model.evaluate(test_descriptors, test_activity, verbose=2)
-    predictions = model.predict(test_descriptors)
-    predictions = (predictions[:,0] > 0.5).astype(np.int).ravel()
-    test_activity = test_activity.ravel()
-    
-    print(tf.math.confusion_matrix(tf.convert_to_tensor(predictions), test_activity))
+print(tf.math.confusion_matrix(tf.convert_to_tensor(predictions), test_activity))
