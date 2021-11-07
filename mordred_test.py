@@ -1,3 +1,4 @@
+from scipy.stats.stats import zscore
 import tensorflow as tf
 import pandas as pd
 import numpy as np
@@ -22,6 +23,27 @@ for index, molecule in df.iterrows():
     smiles.append(molecule['SMILES'])
     activity.append(molecule['ACTIVE'])
 
+def linearNormalization(np_array):
+    returnArr = np.add(np_array, 0.0000000001)
+    return returnArr / (returnArr.max(axis=0) + 0.00000001)
+
+def zscoreNormalization(np_array):
+    from scipy.stats import zscore
+    np_array = zscore(np_array, axis = 0)
+    np_array = np.nan_to_num(np_array).astype(int)    
+    return np_array
+
+def featureScaling(np_array):
+    from sklearn.preprocessing import StandardScaler
+    sc = StandardScaler()
+    np_array = sc.fit_transform(np_array)
+    return np_array
+
+def pcaProcessing(train_x, n):
+    from sklearn.decomposition import PCA
+    pca = PCA(n_components=n)
+    pca.fit(train_x)
+    return pca.transform(train_x)
 # Useful code if you want to use mordred to pickle other files
 # # As df for training
 # activity = pd.DataFrame(activity)
@@ -41,41 +63,31 @@ for index, molecule in df.iterrows():
 #     df.to_pickle(path = "./TestData/pickled_p53.pkl", compression='infer', protocol=5, storage_options=None)
 
 df = pd.read_pickle("./TestData/pickled_p53.pkl")
-print(df.shape)
 
-data = df.values
 df = df.sample(frac=1)
 
+data = df.values
+
 #axis = 1 signifies a vertical split (column wise)
-train, test = np.split(data, [int(9.0 / 10 * len(data))], axis = 0)
-
-train_labels, train_activity, train_descriptors = np.split(train, [1, 2], axis = 1)
-test_labels, test_activity, test_descriptors = np.split(test, [1, 2], axis = 1)
-
-for x in range(1, 5):
-    print(train_labels[x])
-    print(train_activity[x])
-    print(test_labels[x])
+labels, activity, des = np.split(data, [1, 2], axis = 1)
 
 #Processing np array - changing to float, normalizing, and removing nan
-train_activity = np.asarray(train_activity).astype('float64')
-train_descriptors = np.asarray(train_descriptors).astype('float64')
-test_activity = np.asarray(test_activity).astype('float64')
-test_descriptors = np.asarray(test_descriptors).astype('float64')
+activity = np.asarray(activity).astype('float64')
+activity = np.nan_to_num(activity).astype(int)
+des = np.asarray(des).astype('float64')
+des = np.nan_to_num(des).astype(int)
 
-train_activity = np.nan_to_num(train_activity).astype(int)
-train_descriptors = np.nan_to_num(train_descriptors)
-test_activity = np.nan_to_num(test_activity).astype(int)
-test_descriptors = np.nan_to_num(test_descriptors)
+#Normalization 
+des = featureScaling(des)
+N = 3
+des = pcaProcessing(des, N)
 
-train_descriptors = np.add(train_descriptors, 0.0000000001)
-test_descriptors = np.add(test_descriptors, 0.0000000001)
-
-train_descriptors = train_descriptors / (train_descriptors.max(axis=0) + 0.00000001)
-test_descriptors = test_descriptors / (test_descriptors.max(axis=0) + 0.00000001)
+train_labels, test_labels = np.split(labels, [int(.75 * len(labels))], axis = 0)
+train_activity, test_activity = np.split(activity, [int(.75 * len(activity))], axis = 0)
+train_descriptors, test_descriptors = np.split(des, [int(.75 * len(des))], axis = 0)
 
 model = tf.keras.models.Sequential([
-   tf.keras.layers.Dense(208, activation='relu'),
+   tf.keras.layers.Dense(N * 5, activation='relu'),
    tf.keras.layers.Dense(128, activation='relu'),
    tf.keras.layers.Dense(128, activation='relu'),
    tf.keras.layers.Dense(128, activation='relu'),
@@ -87,6 +99,12 @@ model.compile(optimizer='adam',
               loss='binary_crossentropy',
               metrics=['accuracy'])
 
-model.fit(train_descriptors, train_activity, epochs=100)
+model.fit(train_descriptors, train_activity, epochs=50, verbose =2, batch_size = 10)
 
 model.evaluate(test_descriptors, test_activity, verbose=2)
+
+predictions = model.predict(train_descriptors)
+predictions = (predictions[:,0] > 0.5).astype(np.int).ravel()
+test_activity = train_activity.ravel()
+
+print(tf.math.confusion_matrix(tf.convert_to_tensor(predictions), test_activity))
