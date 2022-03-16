@@ -124,13 +124,9 @@ train_activity, test_activity = np.split(activity, [int(.75 * len(activity))], a
 train_descriptors, test_descriptors = np.split(des, [int(.75 * len(des))], axis = 0)
 
 model = tf.keras.models.Sequential([
-   tf.keras.layers.Dense(N * N, activation='leaky_relu'),
-   tf.keras.layers.Dense(N * N * N, activation='leaky_relu'),
-   tf.keras.layers.Dense(N * N * N, activation='leaky_relu'),
-   tf.keras.layers.Dense(N * N * N, activation='leaky_relu'),
-   tf.keras.layers.Dense(N * N * N, activation='leaky_relu'),
-   tf.keras.layers.Dense(N * N * N, activation='sigmoid'),
-   tf.keras.layers.Dense(N * N, activation='sigmoid'),
+   tf.keras.layers.Dense(128, activation='leaky_relu'),
+   tf.keras.layers.Dense(128, activation='leaky_relu'),
+   tf.keras.layers.Dense(128, activation='sigmoid'),
    tf.keras.layers.Dense(1, activation = 'sigmoid')
  ])
 

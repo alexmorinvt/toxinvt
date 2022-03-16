@@ -313,7 +313,7 @@ def MPNNModel(
     message_units=64,
     message_steps=4,
     num_attention_heads=8,
-    dense_units=512,
+    dense_units=128,
 ):
     atom_features = layers.Input((atom_dim), dtype="float32", name="atom_features")
     bond_features = layers.Input((bond_dim), dtype="float32", name="bond_features")
@@ -333,6 +333,8 @@ def MPNNModel(
     x = TransformerEncoder(num_attention_heads, message_units, dense_units)(x)
 
     x = layers.GlobalAveragePooling1D()(x)
+    x = layers.Dense(dense_units, activation="relu")(x)
+    x = layers.Dense(dense_units, activation="relu")(x)
     x = layers.Dense(dense_units, activation="relu")(x)
     x = layers.Dense(dense_units, activation="relu")(x)
     x = layers.Dense(1, activation="sigmoid")(x)

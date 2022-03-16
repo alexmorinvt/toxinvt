@@ -16,8 +16,8 @@ tf.get_logger().setLevel(logging.ERROR)
 warnings.filterwarnings("ignore")
 RDLogger.DisableLog("rdApp.*")
 
-np.random.seed(42)
-tf.random.set_seed(42)
+# np.random.seed(42)
+# tf.random.set_seed(42)
 
 df = pd.read_table('../TestData/balanced_p53.csv', sep=',')
 df.fillna(0, inplace=True)
@@ -32,13 +32,13 @@ train_index = permuted_indices[: int(df.shape[0] * 0.8)]
 x_train = graphs_from_smiles(df.iloc[train_index].SMILES)
 y_train = df.iloc[train_index].ACTIVE
 
-# Valid set: 19 % of data
-valid_index = permuted_indices[int(df.shape[0] * 0.8) : int(df.shape[0] * 0.99)]
+# Valid set: 10 % of data
+valid_index = permuted_indices[int(df.shape[0] * 0.8) : int(df.shape[0] * 0.9)]
 x_valid = graphs_from_smiles(df.iloc[valid_index].SMILES)
 y_valid = df.iloc[valid_index].ACTIVE
 
-# Test set: 1 % of data
-test_index = permuted_indices[int(df.shape[0] * 0.99) :]
+# Test set: 10 % of data
+test_index = permuted_indices[int(df.shape[0] * 0.9) :]
 x_test = graphs_from_smiles(df.iloc[test_index].SMILES)
 y_test = df.iloc[test_index].ACTIVE
 
@@ -48,7 +48,7 @@ mpnn = MPNNModel(
 
 mpnn.compile(
     loss=keras.losses.BinaryCrossentropy(),
-    optimizer=keras.optimizers.Adam(learning_rate=5e-4),
+    optimizer=keras.optimizers.Adam(),
     metrics=[keras.metrics.AUC(name="AUC"), 'binary_accuracy'],
 )
 
@@ -61,7 +61,7 @@ test_dataset = MPNNDataset(x_test, y_test)
 history = mpnn.fit(
     train_dataset,
     validation_data=valid_dataset,
-    epochs=20,
+    epochs=50,
     verbose=2,
     # class_weight={0: 2.0, 1: 0.5},
 )
