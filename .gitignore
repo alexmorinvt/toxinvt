@@ -1,3 +1,4 @@
 ./Reisfeld_pkls/
 *.pkl
 *.csv
+*.pyc
