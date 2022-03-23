@@ -32,13 +32,18 @@ class Tester:
         names, y_train, x_train = tup
 
         self.model = keras.Sequential([
-            keras.layers.Flatten(input_shape=(4,)),
+            keras.layers.Flatten(),
             keras.layers.Dense(16, activation=nn.relu),
             keras.layers.Dense(64, activation=nn.relu),
             keras.layers.Dense(64, activation=nn.relu),
             keras.layers.Dense(16, activation=nn.relu),
             keras.layers.Dense(1, activation=nn.sigmoid),
         ])
+
+        x_train = x_train.replace(np.nan, -1)
+
+        print(x_train.shape)
+        print(y_train.shape)
 
         #standard values are lr = 0.001, b1 = 0.9, b2 = 0.999., ep = 1e-07, amsgrad = False
         opt = tf.keras.optimizers.Adam(
@@ -53,7 +58,7 @@ class Tester:
         class_weight = {0: 1.,
                         1: 0.66}
 
-        self.model.fit(x_train, y_train, callbacks=[LearningRateReducerCb()], epochs=10, class_weight = class_weight)
+        self.model.fit(x_train, y_train, callbacks=[LearningRateReducerCb()], epochs=100, class_weight = class_weight)
         return 0
 
     def test(self, test_name, tup):

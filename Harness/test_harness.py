@@ -1,23 +1,35 @@
-from turtle import shape, xcor
 import pandas as pd
 import numpy as np
 import argparse
 from sklearn import metrics
 import argparse
-from sys import __stdout__, exit
+import sys
 from os import devnull
 
 #MAPS tests to file name and location
-file_map = {"test":"../TestData/antibiotic_activity.csv"}
+file_map = {
+    "TOX21_AhR_LUC_Agonist_viability  ":"../HarnessData/TOX21_AhR_LUC_Agonist_viability.csv",
+    "TOX21_AhR_LUC_Agonist ":"../HarnessData/TOX21_AhR_LUC_Agonist.csv",
+    "TOX21_AR_BLA_Agonist_ratio":"../HarnessData/TOX21_AR_BLA_Agonist_ratio.csv",
+    "TOX21_AR_LUC_MDAKB2_Antagonist_10nM_R1881_viability":"../HarnessData/TOX21_AR_LUC_MDAKB2_Antagonist_10nM_R1881_viability.csv",
+    "TOX21_ARE_BLA_agonist_ratio":"../HarnessData/TOX21_ARE_BLA_agonist_ratio.csv",
+    "TOX21_Aromatase_Inhibition":"../HarnessData/TOX21_Aromatase_Inhibition.csv",
+    "TOX21_CAR_Agonist":"../HarnessData/TOX21_CAR_Agonist.csv",
+    "TOX21_ERa_BLA_Agonist_ratio":"../HarnessData/TOX21_ERa_BLA_Agonist_ratio.csv",
+    "TOX21_ERb_BLA_Agonist_ratio":"../HarnessData/TOX21_ERb_BLA_Agonist_ratio.csv",
+    "TOX21_ERR_Agonist":"../HarnessData/TOX21_ERR_Agonist.csv",
+    "TOX21_NFkB_BLA_agonist_ratio":"../HarnessData/TOX21_NFkB_BLA_agonist_ratio.csv",
+    "TOX21_p53_BLA_p1_ratio":"../HarnessData/TOX21_p53_BLA_p1_ratio.csv",
+    "TOX21_p53_BLA_p1_viability":"../HarnessData/TOX21_p53_BLA_p1_viability.csv"}
 rng = None
 
 # Disable
 def blockPrint():
-    stdout = open(devnull, 'w')
+    sys.stdout = open(devnull, 'w')
 
 # Restore
 def enablePrint():
-    stdout = __stdout__
+    sys.stdout = sys.__stdout__
 
 #Returns a map with each test_name : (train_data, test_data, test_y) after preparing data. Keeps the columns NAME, SMILES, SELFIES, TOXICITY, then everything after.
 def load_dfs(tests, light, split, balanced):
@@ -71,6 +83,8 @@ def main():
     from unit_testing import Tester
     model = Tester()
 
+    from time import strftime
+    
     #train method must be of the form train([chemical name, SMILES, SELFIES, toxicity], [descriptors])
     #test method must be of the form test([chemical name, SMILES, SELFIES], [descriptors])
 
@@ -79,7 +93,7 @@ def main():
     parser = argparse.ArgumentParser(description='Testing Specifications')
     parser.add_argument('-a', default = False, action='store_true', help='Runs the entire test suite')
     parser.add_argument('-b', default = False, action='store_true', help='Runs only the balanced tests')
-    parser.add_argument('-t', nargs='*', default = ["p53"], help='Specify the tests to be ran')
+    parser.add_argument('-t', nargs='*', default = ["TOX21_p53_BLA_p1_ratio"], help='Specify the tests to be ran')
     parser.add_argument('-v', default = False, action='store_true', help='If specified, print out info on training data')
     parser.add_argument('-save', default = False, action  = 'store_true', help='Saves the each output data to a file named: \'test\' + time.csv')
     parser.add_argument('-n', default = 1, help='Number of repititions for each model')
@@ -100,7 +114,7 @@ def main():
     balanced = args.b  #Done
     all_tests = args.a #Done
     no_descriptors = args.light #Done
-    save = args.save #TODO
+    save = args.save #Done
     split = args.split #Done
     metrs = args.m #Done
 
@@ -110,10 +124,12 @@ def main():
         test = file_map.keys()
         
     if args.test_run: #Done
+        file_map["test"] = "../HarnessData/antibiotic_activity.csv"
         tests = ['test']
 
     df_map = load_dfs(tests, no_descriptors, split, balanced)
 
+    print_output = ''
     #Actual loop that loops through the test map
     for test_name, test_map in df_map.items():
 
@@ -133,7 +149,6 @@ def main():
 
         #I love this metrics package - so simple
         current_metrics = metrics.classification_report(test_y, test_predictions, target_names = ['non-toxic', 'toxic'], digits = 4)
-        print(current_metrics)
 
         accuracy = metrics.accuracy_score(test_y, test_predictions)
         f1score = metrics.f1_score(test_y, test_predictions)
@@ -147,20 +162,29 @@ def main():
             'log_loss':log_l, 'confusion_matrix':confusion_matrix}
 
         if save:
-            print(test_map['test'][0].shape)
             test_y = pd.DataFrame(test_y, columns = ['EXPECTED'])
             test_predictions = pd.DataFrame(test_predictions, columns = ['PREDICTED'])
-            print(test_y.shape)
 
             df = pd.concat([test_map['test'][0].reset_index(drop=True), test_y.reset_index(drop=True), test_predictions.reset_index(drop=True)], 
                 axis = 1, ignore_index=True)
             
             df.columns = list(test_map['test'][0].columns) + ['EXPECTED', 'PREDICTED']
 
-            #TODO: Actually save dis 
-        else:
-            for m in metrs:
-                print(metrics_map[m])
+            timestr = strftime("%Y%m%d-%H%M%S")
+
+            df.to_pickle(f"../HarnessResults/{test_name}_{timestr}.pkl")
+        
+        for m in metrs:
+            print_output += str(metrics_map[m])
+
+        print("test name: " + test_name)
+        for m in metrs:
+            print(metrics_map[m])
+
+    timestr = strftime("%Y%m%d-%H%M%S")
+    text_file = open(f"../HarnessResults/results_{timestr}.txt", "w")
+    text_file.write(print_output)
+    text_file.close()
             
         
 

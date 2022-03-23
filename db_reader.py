@@ -7,6 +7,9 @@ from rdkit.Chem import Descriptors
 from multiprocessing import Pool
 import os
 import threading
+import selfies as sf
+from numpy import nan
+sf.set_semantic_constraints("hypervalent")
 
 #READ ME: this file is not very useful with Professor Reisfeld's pickled files uploaded. However, this can be easily adapted to create assay specific pickled files
 def createDBByName(wrapper):
@@ -18,7 +21,7 @@ def createDBByName(wrapper):
     with open(mydata.inputfile, newline='') as csvfile:
         mydata.reader = csv.DictReader(csvfile)
 
-        mydata.fieldnames = ['COUNT', 'SMILES', "PREFERRED_NAME", "ACTIVE"]
+        mydata.fieldnames = ['NAME', 'SMILES', "SELFIES", "TOXICITY"]
 
         #Gets names of the Descriptors for 1. headers and 2. methods
         mydata.descriptor_names = [x[0] for x in Descriptors._descList]
@@ -40,7 +43,12 @@ def createDBByName(wrapper):
             for row in mydata.reader:
                 if row['ASSAY_NAME'] != mydata.assay:
                     continue
-                mydata.descriptor_results = [count, row['SMILES'], row['PREFERRED_NAME'], row['HIT_CALL']]
+
+                try:
+                    selfie = sf.encoder(row['SMILES'])
+                except sf.EncoderError:
+                    selfie = nan
+                mydata.descriptor_results = [row['PREFERRED_NAME'], row['SMILES'], selfie, row['HIT_CALL']]
 
                 mol = Chem.MolFromSmiles(row['SMILES'])
                 for method in mydata.descriptor_methods:
@@ -64,16 +72,17 @@ def run_program():
     with open(assay_name_file, newline='') as csvfile:
         reader = csv.DictReader(csvfile)
 
-        assay_list = []
+        assay_list =  ["TOX21_Aromatase_Inhibition", "TOX21_p53_BLA_p1_ratio", "TOX21_ARE_BLA_agonist_ratio", "TOX21_NFkB_BLA_agonist_ratio", "TOX21_AhR_LUC_Agonist", "TOX21_AR_BLA_Agonist_ratio", "TOX21_CAR_Agonist", 
+            "TOX21_ERa_BLA_Agonist_ratio", "TOX21_ERb_BLA_Agonist_ratio", "TOX21_ERR_Agonist", "TOX21_AhR_LUC_Agonist_viability", "TOX21_AR_LUC_MDAKB2_Antagonist_10nM_R1881_viability", "TOX21_p53_BLA_p1_viability"]
         count = 0
-        for row in reader:
-            if row['ASSAY_NAME'] not in assay_list:
-                assay_list.append(row['ASSAY_NAME'])
+        # for row in reader:
+        #     if row['ASSAY_NAME'] not in assay_list:
+        #         assay_list.append(row['ASSAY_NAME'])
 
         args = []
         for assay in assay_list:
             count += 1
-            args.append((assay, "./Data/toxcast_large.csv", "./Data/" + assay + ".csv"))
+            args.append((assay, "./Data/toxcast_large.csv", "./HarnessData/" + assay + ".csv"))
             
         print(args)
         
