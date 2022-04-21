@@ -32,7 +32,75 @@ def enablePrint():
     sys.stdout = sys.__stdout__
 
 #Returns a map with each test_name : (train_data, test_data, test_y) after preparing data. Keeps the columns NAME, SMILES, SELFIES, TOXICITY, then everything after.
-def load_dfs(tests, light, split, balanced):
+def load_dfs(tests, light, split, balanced, tox):
+    
+    if tox:
+        from rdkit import Chem
+        import gzip
+        from scipy import io 
+        import selfies as sf
+
+        suppl = Chem.rdmolfiles.ForwardSDMolSupplier(gzip.open('../tox21/tox21.sdf.gz'))
+
+        # load data
+
+        y_tr = pd.read_csv('../tox21/tox21_labels_train.csv.gz', index_col=0, compression="gzip")
+        y_te = pd.read_csv('../tox21/tox21_labels_test.csv.gz', index_col=0, compression="gzip")
+        x_tr_dense = pd.read_csv('../tox21/tox21_dense_train.csv.gz', index_col=0, compression="gzip").values
+        x_te_dense = pd.read_csv('../tox21/tox21_dense_test.csv.gz', index_col=0, compression="gzip").values
+        x_tr_sparse = io.mmread('../tox21/tox21_sparse_train.mtx.gz').tocsc()
+        x_te_sparse = io.mmread('../tox21/tox21_sparse_test.mtx.gz').tocsc()
+
+        train_num_molecules = x_tr_sparse.shape[0]
+        test_num_molecules = y_tr.shape[0]
+
+        x = 1
+        smiles = []
+        selfies = []
+        names = []
+        for mol in suppl:
+            if mol is None:
+                smiles.append(np.nan)
+                names.append(smile)
+                selfies.append(smile)
+                continue
+
+            # if x > train_num_molecules:
+            #     break
+            smile = Chem.rdmolfiles.MolToSmiles(mol)
+            smiles.append(smile)
+            names.append(smile)
+            try:
+                selfie = sf.encoder(smile)
+            except sf.EncoderError:
+                selfie = np.nan
+            selfies.append(selfie)
+            x += 1
+
+        # print("test len:", x - 1)
+        # print(len(smiles), len(selfies))
+
+        # smiles_selfies = pd.DataFrame(zip(names, smiles, selfies), columns = pd.Series(['NAMES', 'SMILES', 'SELFIES'])).values
+
+        # filter out very sparse features
+        sparse_col_idx = ((x_tr_sparse > 0).mean(0) > 0.05).A.ravel()
+        x_tr = np.hstack([x_tr_dense, x_tr_sparse[:, sparse_col_idx].A])
+        x_te = np.hstack([x_te_dense, x_te_sparse[:, sparse_col_idx].A])
+
+        smiles_selfies = np.column_stack([names, smiles, selfies])
+        smiles_selfies_tr, smiles_selfies_te = np.split(smiles_selfies, [x_tr.shape[0]])
+
+        test_map = {}
+        for target in y_tr.columns:
+            rows_tr = np.isfinite(y_tr[target]).values
+            rows_te = np.isfinite(y_te[target]).values
+            x_train = x_tr[rows_tr]
+            y_train = y_tr[target][rows_tr]
+            x_test = x_te[rows_te]
+            y_test = y_te[target][rows_te]
+
+            test_map[target] = {"train":(pd.DataFrame(smiles_selfies_tr), pd.DataFrame(y_train), pd.DataFrame(x_train)), "test":(pd.DataFrame(smiles_selfies_te), pd.DataFrame(x_test)), "harness":(y_test)}
+        return test_map
     map = {}
 
     x_cols = ['NAME', 'SMILES', 'SELFIES']
@@ -42,7 +110,6 @@ def load_dfs(tests, light, split, balanced):
     #Make sure there are no extraneous columns in df TODO: Make more flexible
     for test_name in tests:
         df = pd.read_csv(file_map[test_name]).sample(frac=1)
-        
         #Produces a balanced df based on TOXICITY
         if balanced:
             df = df.groupby('TOXICITY')
@@ -67,7 +134,7 @@ def load_dfs(tests, light, split, balanced):
             train_descriptors = train.loc[:, ~train.columns.isin(all_x)]
             test_descriptors = test.loc[:, ~test.columns.isin(all_x)]
             map[test_name] = {"train":(train_x, train_y, train_descriptors), "test":(test_x, test_descriptors), "harness":(test_y["TOXICITY"].values)}
-        
+
     return map
 
 def main():
@@ -102,6 +169,7 @@ def main():
     parser.add_argument('-light', default = False, action='store_true', help='Does not send descriptors to train to save space')
     parser.add_argument('-test', dest='test_run', action='store_true', help='Only for testing the harness')
     parser.add_argument('-m', nargs='*', default = ["report", "confusion_matrix"], help='Specify the metrics to be ran')
+    parser.add_argument('-tox', default=False, action='store_true', help='select to run the tox21 tests')
 
     args = parser.parse_args()
 
@@ -126,8 +194,10 @@ def main():
     if args.test_run: #Done
         file_map["test"] = "../HarnessData/antibiotic_activity.csv"
         tests = ['test']
+    elif args.tox:
+        tests = ['NR.AhR', 'NR.AR', 'NR.AR.LBD', 'NR.Aromatase', 'NR.ER', 'NR.ER.LBD', 'NR.PPAR.gamma', 'SR.ARE', 'SR.ATAD5', 'SR.HSE', 'SR.MMP', 'SR.p53']
 
-    df_map = load_dfs(tests, no_descriptors, split, balanced)
+    df_map = load_dfs(tests, no_descriptors, split, balanced, args.tox)
 
     print_output = ''
     #Actual loop that loops through the test map
